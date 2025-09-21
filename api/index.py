@@ -1,47 +1,47 @@
 # קובץ: api/index.py
+# זהו הקוד המלא של "שרת הנתונים"
+
 from flask import Flask, request, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
-import json, os
+import json
+import os
 
 app = Flask(__name__)
-DB_FILE_PATH = '/tmp/players_db.json'
 
-def read_db():
-    if not os.path.exists(DB_FILE_PATH): return {}
+# הנתיב לקובץ הנתונים שלנו בתוך הסביבה הזמנית של Vercel
+DB_FILE_PATH = '/tmp/golden_forest_db.json'
+
+# --- פעולת קריאת הנתונים (GET) ---
+@app.route('/', methods=['GET'])
+def get_data():
     try:
-        with open(DB_FILE_PATH, 'r') as f: return json.load(f)
-    except: return {}
+        # בודקים אם הקובץ בכלל קיים
+        if not os.path.exists(DB_FILE_PATH):
+            # אם לא, זה אומר שאין נתונים עדיין. נחזיר אובייקט ריק.
+            return jsonify({}), 200
 
-def write_db(data):
-    with open(DB_FILE_PATH, 'w') as f: json.dump(data, f, indent=4)
+        with open(DB_FILE_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return jsonify(data), 200
 
-@app.route('/api/register', methods=['POST'])
-def register():
+    except Exception as e:
+        print(f"Error reading data: {e}")
+        return jsonify(error="שגיאה בקריאת הנתונים מהשרת"), 500
+
+# --- פעולת כתיבת/עדכון הנתונים (POST) ---
+@app.route('/', methods=['POST'])
+def save_data():
     try:
-        data = request.get_json()
-        username, password = data.get('username'), data.get('password')
-        if not username or not password: return jsonify(error='נא למלא שם משתמש וסיסמה'), 400
-        db = read_db()
-        if username in db: return jsonify(error='שם המשתמש תפוס'), 409
-        db[username] = {
-            'password_hash': generate_password_hash(password),
-            'level': 1, 'xp': 0, 'gold': 0
-        }
-        write_db(db)
-        return jsonify(message='השחקן נוצר בהצלחה!'), 201
-    except Exception as e: return jsonify(error=f"שגיאת שרת: {e}"), 500
+        # מקבלים את המידע החדש מגוף הבקשה
+        new_data = request.json
+        if new_data is None:
+            return jsonify(error="לא נשלח מידע לעדכון"), 400
 
-@app.route('/api/login', methods=['POST'])
-def login():
-    try:
-        data = request.get_json()
-        username, password = data.get('username'), data.get('password')
-        if not username or not password: return jsonify(error='נא למלא שם משתמש וסיסמה'), 400
-        db = read_db()
-        player_data = db.get(username)
-        if player_data and check_password_hash(player_data['password_hash'], password):
-            player_info = {'username': username, 'level': player_data.get('level',1), 'xp': player_data.get('xp',0), 'gold': player_data.get('gold',0)}
-            return jsonify(message='התחברת בהצלחה!', player_data=player_info), 200
-        else:
-            return jsonify(error='שם המשתמש או הסיסמה שגויים'), 401
-    except Exception as e: return jsonify(error=f"שגיאת שרת: {e}"), 500
+        with open(DB_FILE_PATH, 'w', encoding='utf-8') as f:
+            # דורסים את כל הקובץ במידע החדש
+            json.dump(new_data, f, indent=4, ensure_ascii=False)
+            
+        return jsonify(message="הנתונים נשמרו בהצלחה"), 200
+
+    except Exception as e:
+        print(f"Error saving data: {e}")
+        return jsonify(error="שגיאה בשמירת הנתונים בשרת"), 500
